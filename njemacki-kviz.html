@@ -1,0 +1,161 @@
+    let listFilter = "all";
+
+    function setupTabs() {
+      document.querySelectorAll(".tab").forEach(button => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+          document.querySelectorAll(".view").forEach(view => view.classList.remove("active"));
+          button.classList.add("active");
+          $(button.dataset.view).classList.add("active");
+        });
+      });
+    }
+
+    function bindPractice() {
+      wordPractice = makePractice("word", words);
+      verbPractice = makePractice("verb", verbs);
+      $("wordCheck").addEventListener("click", () => wordPractice.check());
+      $("wordSkip").addEventListener("click", () => wordPractice.skip());
+      $("wordRestart").addEventListener("click", () => wordPractice.restart());
+      $("wordInput").addEventListener("keydown", event => { if (event.key === "Enter") wordPractice.check(); });
+
+      $("verbCheck").addEventListener("click", () => verbPractice.check());
+      $("verbSkip").addEventListener("click", () => verbPractice.skip());
+      $("verbRestart").addEventListener("click", () => verbPractice.restart());
+      $("verbPraeteritum").addEventListener("keydown", event => { if (event.key === "Enter") $("verbPerfekt").focus(); });
+      $("verbPerfekt").addEventListener("keydown", event => { if (event.key === "Enter") verbPractice.check(); });
+    }
+
+    function setupTest() {
+      $("startTest").addEventListener("click", startTest);
+      $("testNext").addEventListener("click", submitTestAnswer);
+      $("testStop").addEventListener("click", finishTest);
+      $("testWordInput").addEventListener("keydown", event => { if (event.key === "Enter") submitTestAnswer(); });
+      $("testVerbPraeteritum").addEventListener("keydown", event => { if (event.key === "Enter") $("testVerbPerfekt").focus(); });
+      $("testVerbPerfekt").addEventListener("keydown", event => { if (event.key === "Enter") submitTestAnswer(); });
+    }
+
+    function startTest() {
+      testItems = [
+        ...shuffle(words).slice(0, 10),
+        ...shuffle(verbs).slice(0, 3)
+      ];
+      testIndex = 0;
+      testScore = 0;
+      testAnswers = [];
+      $("testIntro").classList.add("hidden");
+      $("testQuiz").classList.remove("hidden");
+      $("testResult").classList.remove("show");
+      renderTestItem();
+    }
+
+    function renderTestItem() {
+      const item = testItems[testIndex];
+      $("testFeedback").className = "feedback";
+      $("testFeedback").textContent = `Pitanje ${testIndex + 1} od ${testItems.length}`;
+      if (item.type === "word") {
+        $("testKind").textContent = "Riječ";
+        $("testPrompt").textContent = item.bs;
+        $("testWordLabel").classList.remove("hidden");
+        $("testVerbFields").classList.add("hidden");
+        $("testWordInput").value = "";
+        $("testWordInput").focus();
+      } else {
+        $("testKind").textContent = "Glagol";
+        $("testPrompt").textContent = item.infinitive;
+        $("testWordLabel").classList.add("hidden");
+        $("testVerbFields").classList.remove("hidden");
+        $("testVerbPraeteritum").value = "";
+        $("testVerbPerfekt").value = "";
+        $("testVerbPraeteritum").focus();
+      }
+    }
+
+    function submitTestAnswer() {
+      const item = testItems[testIndex];
+      let ok = false;
+      let given = "";
+      let expected = "";
+      if (item.type === "word") {
+        given = $("testWordInput").value;
+        expected = item.de;
+        ok = normalize(given) === normalize(expected);
+      } else {
+        const pre = $("testVerbPraeteritum").value;
+        const perf = $("testVerbPerfekt").value;
+        given = `${pre} / ${perf}`;
+        expected = `${item.praeteritum} / ${item.perfekt}`;
+        ok = normalize(pre) === normalize(item.praeteritum) && normalize(perf) === normalize(item.perfekt);
+      }
+      if (ok) testScore += 1;
+      testAnswers.push({
+        prompt: item.type === "word" ? item.bs : item.infinitive,
+        ok,
+        given,
+        expected
+      });
+      testIndex += 1;
+      if (testIndex >= testItems.length) finishTest();
+      else renderTestItem();
+    }
+
+    function finishTest() {
+      const percent = testItems.length ? Math.round((testScore / testItems.length) * 100) : 0;
+      $("testQuiz").classList.add("hidden");
+      $("testIntro").classList.remove("hidden");
+      $("testResult").classList.add("show");
+      $("testResult").innerHTML = `
+        <p class="eyebrow">Rezultat</p>
+        <h2 class="prompt">${percent}%</h2>
+        <p>Tačno: <strong>${testScore}</strong> od <strong>${testItems.length}</strong>.</p>
+        <div class="misses">
+          ${testAnswers.map(answer => `
+            <div class="miss">
+              <strong>${answer.ok ? "Tačno" : "Netačno"}: ${answer.prompt}</strong><br>
+              Tvoj odgovor: ${answer.given || "-"}<br>
+              Tačno: ${answer.expected}
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderList() {
+      const query = normalize($("listSearch").value || "");
+      const entries = [
+        ...words.map(item => ({ kind: "word", title: item.de, desc: item.bs, tag: "riječ" })),
+        ...verbs.map(item => ({ kind: "verb", title: item.infinitive, desc: `Preterit: ${item.praeteritum} · Perfekt: ${item.perfekt}`, tag: "glagol" }))
+      ].filter(item => {
+        const matchesFilter = listFilter === "all" || item.kind === listFilter;
+        const matchesQuery = !query || normalize(`${item.title} ${item.desc}`).includes(query);
+        return matchesFilter && matchesQuery;
+      });
+      $("wordList").innerHTML = entries.map(item => `
+        <article class="word-item">
+          <strong>${item.title}</strong>
+          <span>${item.desc}</span>
+          <div class="tag">${item.tag}</div>
+        </article>
+      `).join("");
+    }
+
+    function setupList() {
+      $("listSearch").addEventListener("input", renderList);
+      document.querySelectorAll("[data-filter]").forEach(button => {
+        button.addEventListener("click", () => {
+          listFilter = button.dataset.filter;
+          renderList();
+        });
+      });
+      renderList();
+    }
+
+    $("nounCount").textContent = words.length;
+    $("verbCount").textContent = verbs.length;
+    setupTabs();
+    bindPractice();
+    setupTest();
+    setupList();
+  </script>
+</body>
+</html>
